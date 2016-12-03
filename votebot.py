@@ -1,43 +1,66 @@
+#!/usr/bin/python3
 from steemapi.steemclient import SteemClient
 import datetime
 from datetime import timedelta,tzinfo
+import yaml
 import time
 import os
 import json
 import sys
 
+with open("config.yml", "r") as config_file:
+  config = yaml.load(config_file)
+  path   = config['path']
+  pwFile = open(config['pw_file'], 'r')
+  voters = config['voters']
+  follow = config['follow']
+  minPow = config['min_power']
+
 class Config():
  # Port and host of the RPC-HTTP-Endpoint of the wallet
  wallet_host           = "127.0.0.1"
  wallet_port           = 8091
- wallet_user           = ''
- wallet_pass           = ''
  # Websocket URL to the full node
  witness_url           = "ws://127.0.0.1:7070"
- wallet_user           = ""
- wallet_password       = ""
-
 
 client = SteemClient(Config)
 
-# Account to vote as
-whales = [] # Account to vote as
-
-#Projects (Accounts, users, etc.) to follow
-follow = []
+pw = pwFile.readline()
+pw = pw.rstrip()
 
 #Get posts of those we follow:
 
 startFrom = -1
-limit = 20
+limit = 2000
+
+
+prev_power = 0
 
 while True:
   for account in follow:
-    transactions = client.rpc.get_account_history(account,startFrom,limit)
+    voter = voters[len(voters)-1]
+    voting_power = float(client.rpc.get_account(voter)['voting_power'])
+    if voting_power < minPow:
+      if prev_power != voting_power:
+        print("Only at %0.2f%% - we need moar powa!!" % (voting_power/100))
+      time.sleep(10)
+      prev_power=voting_power 
+      break
+   
+    prev_power = voting_power
+
+    file_name = str(path + account + "_account_history.db")
+    transactions = []
+    with open( file_name, "r" ) as f:
+      for line in f:
+        try:
+          transactions.append(json.loads(line))
+        except:
+          print("Could not append transaction: %s" % line)
+    transactions = transactions[-100:]
     for transaction in transactions:
-      if transaction[1]['op'][0] == "vote" and transaction[1]['op'][1]['voter'] == account:
-        print("\nFound %s voted on [%s]" % (account, transaction[1]['op'][1]['permlink']))
-  
+      if transaction[1]['op'][0] == "vote" and transaction[1]['op'][1]['voter'] == account and (transaction[1]['op'][1]['permlink'][0:3] != 're-' and transaction[1]['op'][1]['permlink'][-1:] != 'z'):
+        #print("\nFound %s voted on [%s]" % (account, transaction[1]['op'][1]['permlink']))
         vt = transaction[1]['timestamp']
         ht = client.rpc.info()['time'] 
   
@@ -45,24 +68,15 @@ while True:
         hT = datetime.datetime(int(float(ht[0:-15])), int(float(ht[5:-12])), int(float(ht[8:10])), int(float(ht[11:-6])), int(float(ht[14:-3])), int(float(ht[17:])))
         age = (hT - vT) / timedelta(hours=1)
 
-        if age < 24 and age > 0.25:
-          for whale in whales:
-            print("  Checking [%s] for missing votes..." % whale)
-            whale_trans = client.rpc.get_account_history(whale,startFrom,500)
-            voted = 0
-  
-            for wtrans in whale_trans:
-              if wtrans[1]['op'][0] == "vote" and wtrans[1]['op'][1]['voter'] == whale:
-                if wtrans[1]['op'][1]['permlink'] == transaction[1]['op'][1]['permlink']:
-                  print("    Vote Found - skipping")
-                  voted = 1;
-  
-            if voted == 0:
-              try:
-                client.rpc.vote(whale, transaction[1]['op'][1]['author'], transaction[1]['op'][1]['permlink'],100,'true')
-                print("    Voting: %0.2f %s %s" % (age, whale, transaction[1]['op'][1]['permlink']))
-              except:
-                print("    Voting: %0.2f %s %s [FAILED]" % (age, whale, transaction[1]['op'][1]['permlink']))
-        else: 
-          print("      Post is too old - skipping")
-  time.sleep(30)  
+        for voter in voters:
+          voting_power = float(client.rpc.get_account(voter)['voting_power'])
+
+          if (age < 12) and (age > 0.5) and (voting_power > minPow):
+            try:
+              client.rpc.unlock(pw)
+              client.rpc.vote(voter, transaction[1]['op'][1]['author'], transaction[1]['op'][1]['permlink'],100.00,'true')
+              client.rpc.lock()
+              print("    Voting: %-1.2f %s %s %s " % (age, account, voter, transaction[1]['op'][1]['permlink']))
+            except:
+              client.rpc.lock()
+              pass

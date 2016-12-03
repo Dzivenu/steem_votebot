@@ -1,0 +1,10 @@
+#Exchange and Feed API Ketys
+
+#Path to gen_history_file.py output
+path: ""
+
+pw_file: ""
+voters: ['riverhead']
+follow: ['robinhoodwhale']
+min_power: 9500
+

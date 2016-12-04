@@ -7,4 +7,5 @@ pw_file: ""
 voters: ['riverhead']
 follow: ['robinhoodwhale']
 min_power: 9500
-
+min_age: 0
+max_age: 12

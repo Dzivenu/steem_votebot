@@ -15,6 +15,8 @@ with open("config.yml", "r") as config_file:
   voters = config['voters']
   follow = config['follow']
   minPow = config['min_power']
+  minAge = config['min_age']
+  maxAge = config['max_age']
 
 class Config():
  # Port and host of the RPC-HTTP-Endpoint of the wallet
@@ -71,7 +73,7 @@ while True:
         for voter in voters:
           voting_power = float(client.rpc.get_account(voter)['voting_power'])
 
-          if (age < 12) and (age > 0.5) and (voting_power > minPow):
+          if (age < maxAge) and (age > minAge) and (voting_power > minPow):
             try:
               client.rpc.unlock(pw)
               client.rpc.vote(voter, transaction[1]['op'][1]['author'], transaction[1]['op'][1]['permlink'],100.00,'true')
